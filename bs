@@ -1,0 +1,315 @@
+#! /usr/bin/perl
+
+$_ = q(
+Name: bs - Battleship puzzle solver
+Usage:
+    bs [ -h,--help ] [ -H,--Help ] [ -c,--config <config_file> ]
+        [ -C,--class <classes> ]* [ -g,--groups <groups> ]*
+        [ -o,--operations <ops> ]*
+        [ -v,--verbose ]
+Options and arguments:
+    -h,--help                 : print usage
+    -H,--Help                 : print description
+    -c,--config <config_file> : configuration file
+    -F,--fleet <fleet>        : process classes <classes>  [all]
+                              :   <classes> := <class>[,<class>]*
+    -g,--groups <groups>      : process groups <groups>  [all]
+                              :   <groups> := <group>[,<group>]*
+    -o,--operation <ops>      : do operations <ops>  [all]
+                              :   <ops> := <op>[,<op>]*
+                              :   <op> := g+|g-|a+|a-
+    -v,--verbose              : verbose mode
+Version: 0.99
+Date: 2018.01.21
+Author: Marco Broglia (marco.broglia@mutex.it)
+);
+
+#
+# mods
+#
+
+use strict;
+use warnings;
+
+#
+# subs
+#
+
+sub width;
+sub height;
+sub isbig;
+
+sub solve;
+
+sub printG;
+sub printB;
+
+#
+# vars
+#
+
+my @G;                           # Grid
+my @B;                           # Border grid
+my ($R, $C) = (10, 10);
+my ($R2, $C2) = ($R+2, $C+2);
+
+my ($Hr, $Hc) = (    # constraints
+    [reverse (1, 4, 3, 0, undef, 1, 2, 3, 4, undef)],
+    [1, 0, undef, 0, 2, undef, 2, 0, 1, 8]
+);
+unshift @$Hr, undef; unshift @$Hc, undef;
+
+my $N = $R * $C;
+my $N2 = $R2 * $C2;
+
+my %F0 = (
+    I1 => [ [0] ],                        # submarine
+#   J1 => [ [0] ],                        # submarine
+#   K1 => [ [0] ],                        # submarine
+#   L1 => [ [0] ],                        # submarine
+    I2 => [ [0,1], [0,$C2] ],             # destroyer
+#   J2 => [ [0,1], [0,$C2] ],             # destroyer
+#   K2 => [ [0,1], [0,$C2] ],             # destroyer
+    I3 => [ [0,1,2], [0,$C2,2*$C2] ],     # cruiser
+#   J3 => [ [0,1,2], [0,$C2,2*$C2] ],     # cruiser
+    I4 => [ [0,1,2,3],                    # battleship
+            [0,$C2,2*$C2,3*$C2] ],
+    I5 => [ [0,1,2,3,4],                  # carrier
+            [0,$C2,2*$C2,3*$C2,4*$C2] ],
+    S4 => [ [0,1,$C2+1,$C2+2],
+            [1,$C2,$C2+1,2*$C2] ],
+    T4 => [ [1,$C2,$C2+1,$C2+2],
+            [0,$C2,$C2+1,2*$C2],
+            [0,1,2,$C2+1],
+            [1,$C2,$C2+1,2*$C2+1] ],
+#   Z4 => [ [1,2,$C2,$C2+1],
+#           [0,$C2,$C2+1,2*$C2+1] ]
+);
+
+my (%F, %F1);
+my $p0 = $R2 + 1;
+
+my $n = 0;
+
+#
+# opts
+#
+
+#my %Opt;
+#GetOptions \%Opt, "h|help", "H|Help", "c|config=s",
+#    "C|classes=s@", "g|groups=s@", "o|operations=s@",
+#    "v|verbose" or die $usage;
+
+#if ($Opt{h}) { warn $usage; exit 0; }
+#if ($Opt{H}) { s/\n//; warn $_; exit 0; }
+
+#my $verbose = $Opt{v} ? 1 : 0;
+
+#if (@ARGV) { warn $usage; exit 1; }
+
+#
+# subs
+#
+
+#
+# width, height - compute width/height of a ship
+#
+# usage:
+#     $w = width($ship)
+#     $w = height($ship)
+# input:
+#     $ship : (oriented) ship (array ref)
+# output:
+#     $w : width of the ship
+#     $h : height of the ship
+#
+
+sub width {
+    my ($ship) = @_;
+
+    my $w = 0;
+    for my $k (@$ship) { my $c = $k % $C2; $w = $c if $c > $w; }
+    return $w + 1;
+}
+
+sub height {
+    my ($ship) = @_;
+
+    return int($ship->[-1] / $C2) + 1;
+}
+
+#
+# isbig - check if the ship fits
+#
+# usage:
+#     $ret = isbig($ship, $size)
+# input:
+#     $ship : ship (array ref)
+#     $size : number of row/column cells of a ship (array ref)
+# output:
+#     $ret : (1: is too big, 0: fits)
+#
+
+sub isbig {
+    my ($ship, $size) = @_;
+
+    for my $k (0..$#$ship) {
+        return 1 if defined $size->[$k] && $ship->[$k] > $size->[$k];
+    }
+    return 0;
+}
+
+
+sub setup {
+    for my $id (sort keys %F0) {
+        for my $Os (@{$F0{$id}}) {
+            my ($w, $h) = (width($Os), height($Os));
+            my (@Nr, @Nc);
+            for my $e (@$Os) {
+                $Nr[int($e / $C2)]++;
+                $Nc[$e % $C2]++;
+            }
+
+            my @P0;
+            for my $r (1..$R-$h+1) {
+                for my $c (1..$C-$w+1) {
+                    $P0[$r][$c] = 1;
+                }
+            }
+            for my $r (1..$R-$h+1) {
+                if (isbig \@Nr, [ @$Hr[$r..$r+$h-1] ]) {
+                    map { $P0[$r][$_] = 0 } 1..$C-$w+1;
+                };
+            }
+            for my $c (1..$C-$w+1) {
+                if (isbig \@Nc, [ @$Hc[$c..$c+$w-1] ]) {
+                    map { $P0[$_][$c] = 0 } 1..$R-$h+1;
+                };
+            }
+            my @P;
+            for my $r (1..$R-$h+1) {
+                for my $c (1..$C-$w+1) {
+                    push @P, $r * $C2 + $c if $P0[$r][$c];
+                }
+            }
+
+            push @{$F{$id}{os}}, {
+                ship => $Os,
+                w    => $w,
+                h    => $h,
+                Nr   => \@Nr,
+                Nc   => \@Nc,
+                P    => \@P
+            };
+            $F{$id}{n} = 1;
+
+            my %B;
+            for my $e (@$Os) {
+                map { @B{($_-$C2-1..$_-$C2+1,$_-1..$_+1,$e+$C2-1..$e+$C2+1)} =
+                    (1) x 9 } @$Os;
+            }
+            push @{$F1{$id}{os}}, [ sort {$a <=> $b} keys %B ];
+        }
+    }
+    #$F{I1}{n} = 4; $F{I2}{n} = 3; $F{I3}{n} = 2;
+}
+
+sub check {
+    my ($Os, $p) = @_;
+
+    my ($r, $c) = (int($p / $C2), $p % $C2);
+    my ($w, $h) = @{$Os}{qw(w h)};
+    return 0 if isbig $Os->{Nr}, [ @$Hr[$r..$r+$h-1] ];
+    return 0 if isbig $Os->{Nc}, [ @{$Hc}[$c..$c+$w-1] ];
+
+    map { return 0 if $B[$p+$_] } @{$Os->{ship}};
+    return 1;
+}
+
+sub place {
+    my ($Os, $Osb, $p) = @_;
+
+    map { $G[$p+$_] = 1 } @{$Os->{ship}};
+
+    my ($r, $c) = (int($p / $C2), $p % $C2);
+    map { $Hr->[$r+$_] -= $Os->{Nr}[$_] if defined $Hr->[$r+$_] } 0..$Os->{h}-1;
+    map { $Hc->[$c+$_] -= $Os->{Nc}[$_] if defined $Hc->[$c+$_] } 0..$Os->{w}-1;
+
+    map { $B[$p+$_]++ } @$Osb;
+}
+
+sub erase {
+    my ($Os, $Osb, $p) = @_;
+
+    map { $G[$p+$_] = 0 } @{$Os->{ship}};
+
+    my ($r, $c) = (int($p / $C2), $p % $C2);
+    map { $Hr->[$r+$_] += $Os->{Nr}[$_] if defined $Hr->[$r+$_] } 0..$Os->{h}-1;
+    map { $Hc->[$c+$_] += $Os->{Nc}[$_] if defined $Hc->[$c+$_] } 0..$Os->{w}-1;
+
+    map { $B[$p+$_]-- } @$Osb;
+}
+
+my @F;
+
+sub solve {
+    my ($i) = @_;
+
+    my $id = $F[$i];
+    my $k = 0;
+    for my $Os (@{$F{$id}{os}}) {
+        my $Osb = $F1{$id}{os}[$k];
+        for my $p (@{$Os->{P}}) {
+            if (check($Os, $p)) {
+                place($Os, $Osb, $p);
+                $F{$id}{pos} = "$k.$p";
+                print "$id in $k.$p\n" if $id eq 'I1';
+                $F{$id}{n}--;
+                if (grep { $F{$_}{n} } keys %F) {
+                    solve ++$i;
+                } else {
+                    if (!grep { $_ } (@$Hr, @$Hc)) {
+                        print ++$n, "\n"; printG; print "\n";
+                    }
+                }
+                erase($Os, $Osb, $p);
+                $F{$id}{pos} = undef;
+                $F{$id}{n}++;
+                $i--;
+            }
+        }
+        $k++;
+    }
+}
+
+sub printG {
+    #print "(", join(", ", sort keys %F), ") = ";
+    #print "(", join(", ", map { $F{$_}{pos} } sort keys %F), ")\n";
+    for my $r (reverse 1..$R) {
+        for my $c (1..$C) {
+            print $G[$r*$C2+$c] || ".";
+        }
+        print "\n";
+    }
+}
+sub printB {
+    for my $r (reverse 1..$R) {
+        for my $c (1..$C) {
+            print $B[$r*$C2+$c] || ".";
+        }
+        print "\n";
+    }
+}
+
+#
+# main
+#
+
+setup;
+@F = sort keys %F;
+#@F = qw(I1 I1 I1 I1 I2 I2 I2 I3 I3 I4 T4);
+
+#print Dumper \%F;
+#print Dumper \%F1;
+
+solve 0;

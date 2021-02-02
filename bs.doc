@@ -1,0 +1,32 @@
+* fleet
+
+%F = (                  # hash of ships
+    'id1' => { S1 },
+    'id2' => { S2 },
+    ...
+    'idn' => { Sn }
+);
+
+@F = ( S1, S2, ..., Sn )    # array of ships
+
+* ship (hash ref)
+
+S = {
+    'os' => [ Os1, Os2, ..., Osk ],    # oriented ships (k={1,2,4}) (array ref)
+    'n'  => $n                         # number of ships in grid
+}
+
+* oriented ship (hash ref)
+
+Os = {
+    'ship' => [ @S ],     # cells (array ref)
+    'w'    => $w,         # width
+    'h'    => $h,         # height
+    'P'    => [ @P ],     # valid positions (array ref)
+    'Nr'   => [ @Nr ],    # number of cells in each row (array ref)
+    'Nc'   => [ @Nc ]     # number of cells in each column (array ref)
+}
+
+* grid
+
+* border grid

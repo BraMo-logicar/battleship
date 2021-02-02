@@ -1,0 +1,27 @@
+= Battleship puzzle solver
+:source-highlighter: highlight.js
+
+[source,shell]
+----
+Name: bs - Battleship puzzle solver
+Usage:
+    bs [ -h,--help ] [ -H,--Help ] [ -c,--config <config_file> ]
+        [ -C,--class <classes> ]* [ -g,--groups <groups> ]*
+        [ -o,--operations <ops> ]*
+        [ -v,--verbose ]
+Options and arguments:
+    -h,--help                 : print usage
+    -H,--Help                 : print description
+    -c,--config <config_file> : configuration file
+    -F,--fleet <fleet>        : process classes <classes>  [all]
+                              :   <classes> := <class>[,<class>]*
+    -g,--groups <groups>      : process groups <groups>  [all]
+                              :   <groups> := <group>[,<group>]*
+    -o,--operation <ops>      : do operations <ops>  [all]
+                              :   <ops> := <op>[,<op>]*
+                              :   <op> := g+|g-|a+|a-
+    -v,--verbose              : verbose mode
+Version: 0.99
+Date: 2018.01.21
+Author: Marco Broglia (marco.broglia@mutex.it)
+----
